@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>iOS Phone Simulation</title>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+        }
+
+        body {
+            background-color: #121212;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+            color: #ffffff;
+        }
+
+        /* 響應式手機外框 Device Frame (PC vs Mobile) */
+        .phone-container {
+            position: relative;
+            width: 390px;
+            height: 844px;
+            background-color: #000;
+            border-radius: 50px;
+            box-shadow: 0 0 0 12px #2c2c2e, 0 20px 50px rgba(0, 0, 0, 0.8);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                background-color: #000;
+            }
+            .phone-container {
+                width: 100vw;
+                height: 100vh;
+                border-radius: 0;
+                box-shadow: none;
+            }
+        }
+
+        /* Dynamic Island 動態島 */
+        .dynamic-island {
+            position: absolute;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 35px;
+            background-color: #000;
+            border-radius: 20px;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px;
+        }
+
+        .camera-lens {
+            width: 12px;
+            height: 12px;
+            background-color: #111;
+            border-radius: 50%;
+            border: 1px solid #222;
+        }
+
+        /* iOS Status Bar 狀態欄 (電量固定 66%) */
+        .status-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 48px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 0 28px 8px 28px;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 9999;
+            color: #fff;
+        }
+
+        .status-icons {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            font-size: 12px;
+        }
+
+        /* 底部 iOS Home Indicator 主頁橫條 */
+        .home-indicator {
+            position: absolute;
+            bottom: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 135px;
+            height: 5px;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 3px;
+            z-index: 10000;
+            cursor: pointer;
+        }
+
+        /* 頁面顯示狀態控制 */
+        .screen, .app-page {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none !important;
+            flex-direction: column;
+            background-size: cover;
+            background-position: center;
+        }
+
+        .screen.active, .app-page.active {
+            display: flex !important;
+        }
+
+        /* 1. 鎖屏畫面 (Lock Screen) */
+        #lock-screen {
+            background-image: url('wallpaper.jpg');
+            background-size: cover;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 70px;
+            padding-bottom: 50px;
+            text-align: center;
+            z-index: 9000;
+        }
+
+        .lock-clock-container {
+            margin-top: 10px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.4);
+        }
+
+        .lock-date {
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: -0.2px;
+            opacity: 0.95;
+            margin-bottom: 4px;
+        }
+
+        .lock-time {
+            font-size: 82px;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: -2px;
+        }
+
+        .swipe-hint {
+            font-size: 14px;
+            font-weight: 500;
+            opacity: 0.85;
+            animation: bounce 2s infinite;
+            cursor: pointer;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        /* 密碼解鎖介面 (密碼 1015) */
+        #passcode-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            z-index: 9500;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        #passcode-overlay.active {
+            display: flex !important;
+            opacity: 1;
+        }
+
+        .passcode-title {
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 20px;
+        }
+
+        .passcode-dots {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 40px;
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            transition: background-color 0.2s;
+        }
+
+        .dot.filled {
+            background-color: #fff;
+        }
+
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px 22px;
+        }
+
+        .key {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.15);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: 400;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: background 0.15s;
+        }
+
+        .key:active {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        .key-sub {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            margin-top: -2px;
+        }
+
+        .shake {
+            animation: shake 0.4s ease-in-out;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-12px); }
+            40%, 80% { transform: translateX(12px); }
+        }
+
+        /* 2. 主畫面 (Home Screen) */
+        #home-screen {
+            background-image: url('wallpaper.jpg');
+            background-size: cover;
+            padding: 60px 20px 30px 20px;
+            z-index: 100;
+        }
+
+        .app-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 22px 18px;
+            margin-top: 10px;
+        }
+
+        .app-icon-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+
+        .app-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            color: white;
+        }
+
+        .app-name {
+            font-size: 11px;
+            font-weight: 500;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+            letter-spacing: -0.2px;
+        }
+
+        /* App 圖標樣式 */
+        .icon-phone { background: linear-gradient(135deg, #34C759, #11998e); }
+        .icon-photos { background: #ffffff; color: #000; }
+        .icon-weather { background: linear-gradient(135deg, #5AC8FA, #007AFF); }
+        .icon-instagram { background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%,#d6249f 60%,#285AEB 90%); }
+        .icon-kakaotalk { background: #FEE500; color: #000000; }
+        .icon-notes { background: #F2F2F7; color: #E5A93C; }
+
+        /* App 通用 Header */
+        .app-header {
+            height: 88px;
+            padding-top: 40px;
+            padding-left: 16px;
+            padding-right: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            background-color: rgba(0,0,0,0.8);
+            backdrop-filter: blur(10px);
+        }
+
+        .back-btn {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: #0A84FF;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        /* 3. 電話 App (전화) */
+        #app-phone {
+            background-color: #000;
+            color: #fff;
+            z-index: 200;
+        }
+
+        .call-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 0;
+        }
+
+        .call-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid #1c1c1e;
+        }
+
+        .call-info-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .call-name {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .call-detail {
+            font-size: 12px;
+            color: #8e8e93;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* 4. 相冊 App (사진) - 嚴格 3 列、零空隙排版 (22張照片) */
+        #app-photos {
+            background-color: #000;
+            z-index: 200;
+        }
+
+        .photo-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2px;
+            padding-top: 2px;
+            overflow-y: auto;
+            flex: 1;
+            background-color: #000;
+        }
+
+        .photo-thumb {
+            aspect-ratio: 1;
+            cursor: pointer;
+            background-color: #1c1c1e;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .photo-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        /* Lightbox Modal */
+        #photo-lightbox {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.95);
+            z-index: 500;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #photo-lightbox.active {
+            display: flex !important;
+        }
+
+        .lightbox-close {
+            position: absolute;
+            top: 50px;
+            right: 20px;
+            color: #fff;
+            cursor: pointer;
+            background: rgba(255,255,255,0.2);
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .lightbox-img {
+            max-width: 90%;
+            max-height: 75%;
+            object-fit: contain;
+            border-radius: 8px;
+        }
+
+        /* 5. 天氣 App (날씨) - 首爾 */
+        #app-weather {
+            background: linear-gradient(to bottom, #2c3e50, #3498db);
+            align-items: center;
+            padding-top: 60px;
+            text-align: center;
+            color: #fff;
+            z-index: 200;
+        }
+
+        .weather-main {
+            padding: 20px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            width: 100%;
+        }
+
+        .weather-city { font-size: 30px; font-weight: 500; }
+        .weather-temp { font-size: 64px; font-weight: 200; margin: 5px 0; }
+        .weather-desc { font-size: 18px; font-weight: 400; opacity: 0.9; }
+
+        .forecast-list {
+            width: 100%;
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .forecast-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 15px;
+            align-items: center;
+        }
+
+        /* 6. Instagram App */
+        #app-instagram {
+            background-color: #000;
+            color: #fff;
+            z-index: 200;
+        }
+
+        .ig-header {
+            height: 88px;
+            padding-top: 40px;
+            padding-left: 16px;
+            padding-right: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #262626;
+            background-color: #000;
+            font-weight: bold;
+            font-size: 20px;
+            letter-spacing: 0.5px;
+        }
+
+        .ig-content {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .ig-stories {
+            display: flex;
+            gap: 14px;
+            padding: 12px 16px;
+            border-bottom: 1px solid #262626;
+            overflow-x: auto;
+        }
+
+        .story-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .story-ring {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+            padding: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .story-avatar {
+            width: 58px;
+            height: 58px;
+            border-radius: 50%;
+            background-color: #333;
+            background-size: cover;
+            background-position: center;
+            border: 2px solid #000;
+        }
+
+        .story-username {
+            font-size: 11px;
+            color: #dbdbdb;
+            width: 64px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .ig-post {
+            border-bottom: 1px solid #262626;
+            margin-bottom: 12px;
+        }
+
+        .ig-post-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+        }
+
+        .ig-user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ig-user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background-color: #444;
+            background-size: cover;
+            background-position: center;
+        }
+
+        .ig-username {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .ig-post-img-container {
+            width: 100%;
+            aspect-ratio: 1;
+            background-color: #1a1a1a;
+            overflow: hidden;
+        }
+
+        .ig-post-img-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .ig-post-actions {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 16px 6px 16px;
+        }
+
+        .ig-actions-left {
+            display: flex;
+            gap: 16px;
+        }
+
+        .ig-post-likes {
+            padding: 0 16px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .ig-post-caption {
+            padding: 0 16px 12px 16px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .ig-caption-user {
+            font-weight: 600;
+            margin-right: 6px;
+        }
+
+        /* 限時動態觀看頁面 (含動態進度條) */
+        #ig-story-viewer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            z-index: 300;
+            display: none;
+            flex-direction: column;
+        }
+
+        #ig-story-viewer.active {
+            display: flex !important;
+        }
+
+        .story-img-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 1;
+        }
+
+        .story-progress-container {
+            display: flex;
+            gap: 4px;
+            padding: 50px 12px 10px 12px;
+            z-index: 10;
+        }
+
+        .story-progress-bar {
+            flex: 1;
+            height: 2px;
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .story-progress-fill {
+            width: 0%;
+            height: 100%;
+            background-color: #fff;
+            transition: width linear;
+        }
+
+        .story-viewer-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 16px;
+            z-index: 10;
+        }
+
+        .story-viewer-user {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        /* 7. KakaoTalk (카카오톡) */
+        #app-kakaotalk {
+            background-color: #191919;
+            color: #ffffff;
+            z-index: 200;
+        }
+
+        .kt-header {
+            background-color: #191919;
+            padding: 48px 16px 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .chat-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .chat-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            gap: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #252525;
+        }
+
+        .chat-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 18px;
+            background-color: #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 600;
+            flex-shrink: 0;
+            color: #fff;
+        }
+
+        .chat-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .chat-name {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .chat-last-msg {
+            font-size: 13px;
+            color: #8e8e93;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chat-time {
+            font-size: 11px;
+            color: #636366;
+        }
+
+        #kt-room-view {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #191919;
+            z-index: 300;
+            display: none;
+            flex-direction: column;
+        }
+
+        #kt-room-view.active {
+            display: flex !important;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background-color: #191919;
+        }
+
+        .msg-row {
+            display: flex;
+            gap: 8px;
+            max-width: 80%;
+        }
+
+        .msg-row.me {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .msg-bubble {
+            padding: 9px 13px;
+            border-radius: 14px;
+            font-size: 14px;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+
+        .msg-row.other .msg-bubble {
+            background-color: #2C2C2E;
+            color: #ffffff;
+            border-top-left-radius: 2px;
+        }
+
+        .msg-row.me .msg-bubble {
+            background-color: #FEE500;
+            color: #000000;
+            border-top-right-radius: 2px;
+        }
+
+        /* 8. 備忘錄 (메모) */
+        #app-notes {
+            background-color: #000000;
+            color: #fff;
+            z-index: 200;
+        }
+
+        .note-item {
+            padding: 14px 16px;
+            border-bottom: 1px solid #2c2c2e;
+            cursor: pointer;
+        }
+
+        .note-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .note-preview {
+            font-size: 13px;
+            color: #8e8e93;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #note-detail-view {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #1c1c1e;
+            z-index: 300;
+            display: none;
+            flex-direction: column;
+            padding: 20px;
+            padding-top: 90px;
+        }
+
+        #note-detail-view.active {
+            display: flex !important;
+        }
+
+        .note-detail-content {
+            font-size: 15px;
+            line-height: 1.6;
+            color: #e5e5ea;
+            white-space: pre-line;
+        }
+    </style>
+</head>
+<body>
+
+<div class="phone-container">
+    <!-- Dynamic Island 動態島 -->
+    <div class="dynamic-island">
+        <div class="camera-lens"></div>
+        <div style="width: 8px; height: 8px; background-color: #08081a; border-radius: 50%;"></div>
+    </div>
+
+    <!-- Status Bar (電量固定 66%，時間動態) -->
+    <div class="status-bar">
+        <span id="status-time">00:00</span>
+        <div class="status-icons">
+            <i data-lucide="signal" size="14"></i>
+            <i data-lucide="wifi" size="14"></i>
+            <span>66%</span>
+            <i data-lucide="battery" size="16"></i>
+        </div>
+    </div>
+
+    <!-- Home Indicator -->
+    <div class="home-indicator" onpointerdown="goHome()"></div>
+
+    <!-- ==================== 1. 鎖屏畫面 (預設唯一 active 顯示) ==================== -->
+    <div id="lock-screen" class="screen active">
+        <div class="lock-clock-container">
+            <div class="lock-date" id="lock-date">10월 22일 수요일</div>
+            <div class="lock-time" id="lock-time">00:00</div>
+        </div>
+        <div class="swipe-hint" onpointerdown="showPasscode()">
+            <i data-lucide="chevron-up" size="20"></i><br>
+            위로 쓸어올려서 잠금 해제
+        </div>
+    </div>
+
+    <!-- 密碼解鎖介面 (密碼 1015) -->
+    <div id="passcode-overlay">
+        <div class="passcode-title">암호 입력</div>
+        <div class="passcode-dots" id="passcode-dots">
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+        </div>
+        <div class="keypad">
+            <div class="key" onpointerdown="pressKey('1')">1</div>
+            <div class="key" onpointerdown="pressKey('2')">2<span class="key-sub">ABC</span></div>
+            <div class="key" onpointerdown="pressKey('3')">3<span class="key-sub">DEF</span></div>
+            <div class="key" onpointerdown="pressKey('4')">4<span class="key-sub">GHI</span></div>
+            <div class="key" onpointerdown="pressKey('5')">5<span class="key-sub">JKL</span></div>
+            <div class="key" onpointerdown="pressKey('6')">6<span class="key-sub">MNO</span></div>
+            <div class="key" onpointerdown="pressKey('7')">7<span class="key-sub">PQRS</span></div>
+            <div class="key" onpointerdown="pressKey('8')">8<span class="key-sub">TUV</span></div>
+            <div class="key" onpointerdown="pressKey('9')">9<span class="key-sub">WXYZ</span></div>
+            <div></div>
+            <div class="key" onpointerdown="pressKey('0')">0</div>
+            <div></div>
+        </div>
+    </div>
+
+    <!-- ==================== 2. 主畫面 (Home Screen) ==================== -->
+    <div id="home-screen" class="screen">
+        <div class="app-grid">
+            <!-- 전화 -->
+            <div class="app-icon-wrapper" onpointerdown="openApp('app-phone')">
+                <div class="app-icon icon-phone"><i data-lucide="phone" size="30"></i></div>
+                <span class="app-name">전화</span>
+            </div>
+            <!-- 사진 -->
+            <div class="app-icon-wrapper" onpointerdown="openApp('app-photos')">
+                <div class="app-icon icon-photos"><i data-lucide="image" size="30" color="#FF3B30"></i></div>
+                <span class="app-name">사진</span>
+            </div>
+            <!-- 날씨 -->
+            <div class="app-icon-wrapper" onpointerdown="openApp('app-weather')">
+                <div class="app-icon icon-weather"><i data-lucide="cloud-sun" size="30"></i></div>
+                <span class="app-name">날씨</span>
+            </div>
+            <!-- Instagram -->
+            <div class="app-icon-wrapper" onpointerdown="openApp('app-instagram')">
+                <div class="app-icon icon-instagram"><i data-lucide="instagram" size="30"></i></div>
+                <span class="app-name">Instagram</span>
+            </div>
+            <!-- 카카오톡 -->
+            <div class="app-icon-wrapper" onpointerdown="openApp('app-kakaotalk')">
+                <div class="app-icon icon-kakaotalk"><i data-lucide="message-circle" size="30" fill="#000"></i></div>
+                <span class="app-name">카카오톡</span>
+            </div>
+            <!-- 메모 -->
+            <div class="app-icon-wrapper" onpointerdown="openApp('app-notes')">
+                <div class="app-icon icon-notes"><i data-lucide="file-text" size="30"></i></div>
+                <span class="app-name">메모</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== App 內頁 (app-page) ==================== -->
+
+    <!-- 전화 (Phone) -->
+    <div id="app-phone" class="app-page">
+        <div class="app-header">
+            <div class="back-btn" onpointerdown="goHome()"><i data-lucide="chevron-left"></i> 홈</div>
+            <span style="font-weight: 600; font-size: 17px;">최근 통화</span>
+            <div style="width: 40px;"></div>
+        </div>
+        <div class="call-list" id="call-list-container"></div>
+    </div>
+
+    <!-- 사진 (Photos - 22 張照片無縫排版與放大檢視) -->
+    <div id="app-photos" class="app-page">
+        <div class="app-header">
+            <div class="back-btn" onpointerdown="goHome()"><i data-lucide="chevron-left"></i> 홈</div>
+            <span style="font-weight:600;">보관함</span>
+            <div style="width: 40px;"></div>
+        </div>
+        <div class="photo-grid">
+            <div class="photo-thumb" onpointerdown="openPhoto('photo1.jpg')"><img src="photo1.jpg" alt="Photo 1"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo2.jpg')"><img src="photo2.jpg" alt="Photo 2"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo3.jpg')"><img src="photo3.jpg" alt="Photo 3"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo4.jpg')"><img src="photo4.jpg" alt="Photo 4"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo5.jpg')"><img src="photo5.jpg" alt="Photo 5"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo6.jpg')"><img src="photo6.jpg" alt="Photo 6"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo7.jpg')"><img src="photo7.jpg" alt="Photo 7"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo8.jpg')"><img src="photo8.jpg" alt="Photo 8"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo9.jpg')"><img src="photo9.jpg" alt="Photo 9"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo10.jpg')"><img src="photo10.jpg" alt="Photo 10"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo11.jpg')"><img src="photo11.jpg" alt="Photo 11"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo12.jpg')"><img src="photo12.jpg" alt="Photo 12"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo13.jpg')"><img src="photo13.jpg" alt="Photo 13"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo14.jpg')"><img src="photo14.jpg" alt="Photo 14"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo15.jpg')"><img src="photo15.jpg" alt="Photo 15"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo16.jpg')"><img src="photo16.jpg" alt="Photo 16"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo17.jpg')"><img src="photo17.jpg" alt="Photo 17"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo18.jpg')"><img src="photo18.jpg" alt="Photo 18"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo19.jpg')"><img src="photo19.jpg" alt="Photo 19"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo20.jpg')"><img src="photo20.jpg" alt="Photo 20"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo21.jpg')"><img src="photo21.jpg" alt="Photo 21"></div>
+            <div class="photo-thumb" onpointerdown="openPhoto('photo22.jpg')"><img src="photo22.jpg" alt="Photo 22"></div>
+        </div>
+
+        <!-- Lightbox 放大檢視 Modal -->
+        <div id="photo-lightbox">
+            <div class="lightbox-close" onpointerdown="closePhoto()"><i data-lucide="x" size="20"></i></div>
+            <img id="lightbox-image" class="lightbox-img" src="" alt="Expanded Photo">
+        </div>
+    </div>
+
+    <!-- 날씨 (Weather - 首爾) -->
+    <div id="app-weather" class="app-page">
+        <div class="app-header" style="border: none; width: 100%; background: transparent;">
+            <div class="back-btn" onpointerdown="goHome()" style="color: #fff;"><i data-lucide="chevron-left"></i> 홈</div>
+            <span style="font-weight: 600;">날씨</span>
+            <div style="width: 40px;"></div>
+        </div>
+        <div class="weather-main">
+            <div class="weather-city">서울</div>
+            <div class="weather-temp">10°C</div>
+            <div class="weather-desc">맑음</div>
+            <div style="margin-top: 8px; font-size: 14px; opacity: 0.85;">최고: 14° | 최저: 5°</div>
+        </div>
+        <div class="forecast-list">
+            <div class="forecast-item"><span>오늘</span><i data-lucide="sun" size="18"></i><span>10° / 5°</span></div>
+            <div class="forecast-item"><span>금요일</span><i data-lucide="cloud-sun" size="18"></i><span>12° / 6°</span></div>
+            <div class="forecast-item"><span>토요일</span><i data-lucide="cloud" size="18"></i><span>9° / 4°</span></div>
+            <div class="forecast-item"><span>일요일</span><i data-lucide="cloud-rain" size="18"></i><span>8° / 3°</span></div>
+        </div>
+    </div>
+
+    <!-- Instagram -->
+    <div id="app-instagram" class="app-page">
+        <div class="ig-header">
+            <div style="display:flex; align-items:center; gap:6px;">Instagram</div>
+            <div style="display:flex; gap:16px;">
+                <i data-lucide="heart" size="22"></i>
+                <i data-lucide="send" size="22"></i>
+            </div>
+        </div>
+        <div class="ig-content">
+            <!-- 限時動態區 (h_evva_n) -->
+            <div class="ig-stories">
+                <div class="story-item" onpointerdown="openStory()">
+                    <div class="story-ring">
+                        <div class="story-avatar" style="background-image: url('story_evan.jpg');"></div>
+                    </div>
+                    <span class="story-username">h_evva_n</span>
+                </div>
+            </div>
+
+            <!-- 主人 H 貼文 (包含 ig_post_h.jpg 標籤) -->
+            <div class="ig-post">
+                <div class="ig-post-header">
+                    <div class="ig-user-info">
+                        <div class="ig-user-avatar" style="background-image: url('story_evan.jpg');"></div>
+                        <span class="ig-username">H</span>
+                    </div>
+                    <i data-lucide="more-horizontal" size="18"></i>
+                </div>
+                <div class="ig-post-img-container">
+                    <img src="ig_post_h.jpg" alt="Post">
+                </div>
+                <div class="ig-post-actions">
+                    <div class="ig-actions-left">
+                        <i data-lucide="heart" size="22"></i>
+                        <i data-lucide="message-circle" size="22"></i>
+                        <i data-lucide="send" size="22"></i>
+                    </div>
+                    <i data-lucide="bookmark" size="22"></i>
+                </div>
+                <div class="ig-post-likes">좋아요 128개</div>
+                <div class="ig-post-caption">
+                    <span class="ig-caption-user">H</span>오늘 하늘 감성 미쳤다 ☁️✨
+                </div>
+            </div>
+        </div>
+
+        <div style="position: absolute; bottom: 20px; right: 20px; z-index: 50;">
+            <div onpointerdown="goHome()" style="background: rgba(0,0,0,0.7); padding: 8px 14px; border-radius: 20px; font-size: 13px; cursor: pointer; border: 1px solid rgba(255,255,255,0.2);">홈으로</div>
+        </div>
+
+        <!-- 限時動態播放器 (包含動畫進度條與 story_evan.jpg 標籤) -->
+        <div id="ig-story-viewer">
+            <img src="story_evan.jpg" alt="Story" class="story-img-bg">
+            <div class="story-progress-container">
+                <div class="story-progress-bar"><div class="story-progress-fill" id="story-progress-fill"></div></div>
+            </div>
+            <div class="story-viewer-header">
+                <div class="story-viewer-user">
+                    <div class="story-avatar" style="width:32px; height:32px; background-image: url('story_evan.jpg');"></div>
+                    <span>h_evva_n</span>
+                    <span style="font-size:12px; color:#aaa; font-weight:normal;">✓</span>
+                </div>
+                <i data-lucide="x" size="24" onpointerdown="closeStory()" style="cursor: pointer;"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- 카카오톡 (KakaoTalk) -->
+    <div id="app-kakaotalk" class="app-page">
+        <div class="kt-header">
+            <div class="back-btn" onpointerdown="goHome()"><i data-lucide="chevron-left"></i> 홈</div>
+            <span>채팅</span>
+            <i data-lucide="search" size="20"></i>
+        </div>
+        <div class="chat-list">
+            <!-- 나와의 채팅 (指定時間訊息) -->
+            <div class="chat-item" onpointerdown="openChat('나와의 채팅 (나)', [
+                {sender: 'me', text: '오후에 나, 복숭아 아이스티 한 잔 시켜주기'},
+                {sender: 'me', text: '데모 프로듀서한테 보내야 함'},
+                {sender: 'me', text: '오늘 생각 끝. 내일 점심은 국밥 먹으러 가자고 하기'},
+                {sender: 'me', text: '새로 나온 랜덤 튜이(블라인드 박스) 사야 함'}
+            ])">
+                <div class="chat-avatar" style="background:#007AFF;">나</div>
+                <div class="chat-info">
+                    <div class="chat-name">나와의 채팅</div>
+                    <div class="chat-last-msg">오늘 생각 끝. 내일 점심은 국밥 먹으러 가자고 하기</div>
+                </div>
+                <div class="chat-time">오후 22:00</div>
+            </div>
+
+            <!-- chiller -->
+            <div class="chat-item" onpointerdown="openChat('chiller', [
+                {sender: 'other', text: '어디야? 파일 빨리 보내줘.'},
+                {sender: 'me', text: '지금 가는 중이야, 조금만 기다려.'},
+                {sender: 'other', text: '알겠어, 서둘러.'}
+            ])">
+                <div class="chat-avatar" style="background:#5856D6;">C</div>
+                <div class="chat-info">
+                    <div class="chat-name">chiller</div>
+                    <div class="chat-last-msg">알겠어, 서둘러.</div>
+                </div>
+                <div class="chat-time">오후 9:17</div>
+            </div>
+
+            <!-- apro -->
+            <div class="chat-item" onpointerdown="openChat('apro', [
+                {sender: 'other', text: '오늘 작업한 비트 들어봤어?'},
+                {sender: 'me', text: '웅 방금 들었는데 미쳤더라 ㅋㅋ'},
+                {sender: 'other', text: '역시 통하는구만 내일 스튜디오에서 보자!'}
+            ])">
+                <div class="chat-avatar" style="background:#FF9500;">A</div>
+                <div class="chat-info">
+                    <div class="chat-name">apro</div>
+                    <div class="chat-last-msg">역시 통하는구만 내일 스튜디오에서 보자!</div>
+                </div>
+                <div class="chat-time">오후 7:45</div>
+            </div>
+
+            <!-- imad royal -->
+            <div class="chat-item" onpointerdown="openChat('imad royal', [
+                {sender: 'other', text: 'Did you check the mixing file?'},
+                {sender: 'me', text: 'Yes, checking right now.'}
+            ])">
+                <div class="chat-avatar" style="background:#34C759;">IR</div>
+                <div class="chat-info">
+                    <div class="chat-name">imad royal</div>
+                    <div class="chat-last-msg">Yes, checking right now.</div>
+                </div>
+                <div class="chat-time">오후 4:22</div>
+            </div>
+
+            <!-- DCF -->
+            <div class="chat-item" onpointerdown="openChat('DCF', [
+                {sender: 'other', text: '프로젝트 승인 떨어졌어! 수고했어'},
+                {sender: 'me', text: '와 진짜요? 감사합니다!!'}
+            ])">
+                <div class="chat-avatar" style="background:#AF52DE;">D</div>
+                <div class="chat-info">
+                    <div class="chat-name">DCF</div>
+                    <div class="chat-last-msg">와 진짜요? 감사합니다!!</div>
+                </div>
+                <div class="chat-time">어제</div>
+            </div>
+        </div>
+
+        <div id="kt-room-view">
+            <div class="app-header" style="background: #191919;">
+                <div class="back-btn" onpointerdown="closeChat()"><i data-lucide="chevron-left"></i> 목록</div>
+                <span id="kt-room-title" style="font-weight: 600;">상대방</span>
+                <i data-lucide="menu" size="20"></i>
+            </div>
+            <div class="chat-messages" id="kt-messages"></div>
+        </div>
+    </div>
+
+    <!-- 메모 (Notes) -->
+    <div id="app-notes" class="app-page">
+        <div class="app-header">
+            <div class="back-btn" onpointerdown="goHome()"><i data-lucide="chevron-left"></i> 홈</div>
+            <span style="font-weight: 600;">메모</span>
+            <i data-lucide="square-pen" size="20" color="#E5A93C"></i>
+        </div>
+        <!-- 普拉提筆記 -->
+        <div class="note-item" onpointerdown="openNoteDetail('트위터에서 본 운동 게으름뱅이도 꾸준히 할 수 있는 필라테스 방법', '북마크해뒀으니까 꼭 잊지 말고 보기! 매일 조금씩이라도 따라 하기.')">
+            <div class="note-title">트위터에서 본 운동 게으름뱅이도 꾸준히 할 수 있는 필라테스 방법</div>
+            <div class="note-preview">북마크해뒀으니까 꼭 잊지 말고 보기! 매일 조금씩이라도 따라 하기.</div>
+        </div>
+        <div class="note-item" onpointerdown="openNoteDetail('비밀번호 및 중요 단서', '1. 스튜디오 출입문 비번: 1015\n2. 노트북 백업 폴더 암호: 7788\n\n* 절대 다른 사람에게 공유하지 말 것.')">
+            <div class="note-title">비밀번호 및 중요 단서</div>
+            <div class="note-preview">1. 스튜디오 출입문 비번: 1015...</div>
+        </div>
+
+        <div id="note-detail-view">
+            <div class="app-header" style="position: absolute; top:0; left:0; width:100%; border:none; background: #1c1c1e;">
+                <div class="back-btn" onpointerdown="closeNoteDetail()" style="color: #E5A93C;"><i data-lucide="chevron-left"></i> 메모</div>
+            </div>
+            <h2 id="note-detail-title" style="margin-bottom: 12px; font-size: 18px;">제목</h2>
+            <div id="note-detail-content" class="note-detail-content">내용</div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // 初始化 Lucide 圖標
+    lucide.createIcons();
+
+    // 1. 強制初始化：網頁載入時嚴格關閉所有 App 與主畫面，僅保留鎖屏
+    window.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.app-page').forEach(page => {
+            page.classList.remove('active');
+        });
+        document.querySelectorAll('.screen').forEach(screen => {
+            screen.classList.remove('active');
+        });
+        
+        // 僅激活鎖屏
+        document.getElementById('lock-screen').classList.add('active');
+        document.getElementById('passcode-overlay').classList.remove('active');
+    });
+
+    // 動態抓取系統時間與韓文日期
+    function updateClock() {
+        const now = new Date();
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const timeStr = `${hours}:${minutes}`;
+
+        document.getElementById('status-time').innerText = timeStr;
+        document.getElementById('lock-time').innerText = timeStr;
+
+        const month = now.getMonth() + 1;
+        const date = now.getDate();
+        const days = ['일', '월', '화', '수', '목', '금', '토'];
+        const dayName = days[now.getDay()];
+        document.getElementById('lock-date').innerText = `${month}월 ${date}일 (${dayName})`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // 初始化通話紀錄 (chiller, apro, imad royal, DCF)
+    function initCallHistory() {
+        const contactNames = ['chiller', 'apro', 'imad royal', 'DCF'];
+        const callTypes = [
+            { type: 'incoming', icon: 'phone-incoming', color: '#34C759', label: '수신 전화' },
+            { type: 'missed', icon: 'phone-missed', color: '#FF3B30', label: '부재중 전화' },
+            { type: 'outgoing', icon: 'phone-outgoing', color: '#0A84FF', label: '발신 전화' }
+        ];
+        const timeStamps = ['오늘 오후 3:12', '오늘 오전 11:05', '어제 오후 8:45', '10월 19일', '10월 18일'];
+
+        const container = document.getElementById('call-list-container');
+        container.innerHTML = '';
+
+        for (let i = 0; i < 6; i++) {
+            const randomName = contactNames[Math.floor(Math.random() * contactNames.length)];
+            const randomType = callTypes[Math.floor(Math.random() * callTypes.length)];
+            const randomTime = timeStamps[Math.floor(Math.random() * timeStamps.length)];
+
+            const item = document.createElement('div');
+            item.className = 'call-item';
+            item.innerHTML = `
+                <div class="call-info-left">
+                    <i data-lucide="${randomType.icon}" size="18" color="${randomType.color}"></i>
+                    <div>
+                        <div class="call-name" style="color: ${randomType.type === 'missed' ? '#FF3B30' : '#fff'}">${randomName}</div>
+                        <div class="call-detail"><span>${randomType.label}</span> • <span>${randomTime}</span></div>
+                    </div>
+                </div>
+                <i data-lucide="info" size="18" color="#0A84FF"></i>
+            `;
+            container.appendChild(item);
+        }
+        lucide.createIcons();
+    }
+    initCallHistory();
+
+    // 2. 解鎖機制：密碼 1015
+    let inputPasscode = "";
+    const correctPasscode = "1015";
+
+    function showPasscode() {
+        document.getElementById('passcode-overlay').classList.add('active');
+    }
+
+    function pressKey(key) {
+        if (inputPasscode.length < 4) {
+            inputPasscode += key;
+            updateDots();
+
+            if (inputPasscode.length === 4) {
+                setTimeout(checkPasscode, 150);
+            }
+        }
+    }
+
+    function updateDots() {
+        const dots = document.querySelectorAll('.dot');
+        dots.forEach((dot, index) => {
+            if (index < inputPasscode.length) {
+                dot.classList.add('filled');
+            } else {
+                dot.classList.remove('filled');
+            }
+        });
+    }
+
+    function checkPasscode() {
+        if (inputPasscode === correctPasscode) {
+            document.getElementById('passcode-overlay').classList.remove('active');
+            document.getElementById('lock-screen').classList.remove('active');
+            document.getElementById('home-screen').classList.add('active');
+            inputPasscode = "";
+            updateDots();
+        } else {
+            const overlay = document.getElementById('passcode-overlay');
+            overlay.classList.add('shake');
+            setTimeout(() => {
+                overlay.classList.remove('shake');
+                inputPasscode = "";
+                updateDots();
+            }, 400);
+        }
+    }
+
+    // 3. 開啟 App 機制
+    function openApp(appId) {
+        document.getElementById('home-screen').classList.remove('active');
+        document.querySelectorAll('.app-page').forEach(page => page.classList.remove('active'));
+        document.getElementById(appId).classList.add('active');
+    }
+
+    function goHome() {
+        const lockScreen = document.getElementById('lock-screen');
+        if (lockScreen.classList.contains('active')) return;
+
+        document.getElementById('kt-room-view').classList.remove('active');
+        document.getElementById('note-detail-view').classList.remove('active');
+        document.getElementById('ig-story-viewer').classList.remove('active');
+        document.getElementById('passcode-overlay').classList.remove('active');
+        document.getElementById('photo-lightbox').classList.remove('active');
+
+        document.querySelectorAll('.app-page').forEach(p => p.classList.remove('active'));
+        document.getElementById('home-screen').classList.add('active');
+    }
+
+    // 4. 相冊 Lightbox 燈箱放大功能
+    function openPhoto(imgUrl) {
+        const lightbox = document.getElementById('photo-lightbox');
+        const lightboxImg = document.getElementById('lightbox-image');
+        lightboxImg.src = imgUrl;
+        lightbox.classList.add('active');
+    }
+
+    function closePhoto() {
+        document.getElementById('photo-lightbox').classList.remove('active');
+    }
+
+    // Instagram 限時動態互動 (含進度條動畫)
+    let storyTimer = null;
+    function openStory() {
+        const viewer = document.getElementById('ig-story-viewer');
+        const fill = document.getElementById('story-progress-fill');
+        viewer.classList.add('active');
+        fill.style.width = '0%';
+        fill.style.transition = 'none';
+
+        setTimeout(() => {
+            fill.style.transition = 'width 3s linear';
+            fill.style.width = '100%';
+        }, 50);
+
+        storyTimer = setTimeout(() => {
+            closeStory();
+        }, 3000);
+    }
+
+    function closeStory() {
+        clearTimeout(storyTimer);
+        document.getElementById('ig-story-viewer').classList.remove('active');
+    }
+
+    // KakaoTalk 對話室
+    function openChat(name, messages) {
+        document.getElementById('kt-room-title').innerText = name;
+        const msgContainer = document.getElementById('kt-messages');
+        msgContainer.innerHTML = '';
+
+        messages.forEach(m => {
+            const row = document.createElement('div');
+            row.className = `msg-row ${m.sender}`;
+            row.innerHTML = `<div class="msg-bubble">${m.text}</div>`;
+            msgContainer.appendChild(row);
+        });
+
+        document.getElementById('kt-room-view').classList.add('active');
+    }
+
+    function closeChat() {
+        document.getElementById('kt-room-view').classList.remove('active');
+    }
+
+    // 備忘錄詳細頁
+    function openNoteDetail(title, content) {
+        document.getElementById('note-detail-title').innerText = title;
+        document.getElementById('note-detail-content').innerText = content;
+        document.getElementById('note-detail-view').classList.add('active');
+    }
+
+    function closeNoteDetail() {
+        document.getElementById('note-detail-view').classList.remove('active');
+    }
+</script>
+</body>
+</html>
